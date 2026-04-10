@@ -1,6 +1,6 @@
 # Smart Storage Locker Management System
 
-A comprehensive backend service for managing smart storage lockers with user reservations, Redis caching, and a modern web UI.
+A comprehensive backend service for managing smart storage lockers with user reservations, Redis caching, and centralized logging with Kibana visualization.
 
 ## 🚀 Features
 
@@ -8,9 +8,9 @@ A comprehensive backend service for managing smart storage lockers with user res
 - **User Management**: Registration, login with JWT authentication, role-based access control
 - **Locker Management**: Admin can create, update, and deactivate lockers
 - **Reservation System**: Users can reserve and release lockers with conflict prevention
-- **Redis Caching**: Cached available lockers for faster API response
-- **Comprehensive Logging**: Application logging with Kibana integration support
-- **Modern UI**: Responsive web interface for both users and admins
+- **Redis Caching**: Cached available lockers for faster API response times
+- **Centralized Logging**: Application logging with Logstash and Kibana integration for log aggregation and visualization
+- **Comprehensive Monitoring**: Real-time log transfer and analytics dashboard
 
 ### Role-Based Access
 - **Admin**: Create/manage lockers, view all reservations, manage users
@@ -221,7 +221,7 @@ curl -X PUT http://localhost:8000/api/reservations/1/release/ \
 - `created_at`: Timestamp
 - `updated_at`: Timestamp
 
-## ⚡ Redis Caching
+## ⚡ Redis Caching Implementation
 
 The system uses Redis to cache available lockers for improved performance:
 
@@ -238,7 +238,27 @@ Cache is automatically invalidated when:
 - A locker is released
 - Cache TTL expires (60 seconds)
 
-## 📝 Logging
+### Redis Cache Visualization
+
+![Redis Cache Implementation](redis.png)
+
+*Redis caching layer implementation showing cache hit/miss patterns and performance optimization*
+
+### Configuration
+```python
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://localhost:6379/0',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'TIMEOUT': 60,
+    }
+}
+```
+
+## 📝 Logging & Kibana Integration
 
 ### Log Files
 - `logs/app.log`: All application logs (INFO level and above)
@@ -252,20 +272,78 @@ Cache is automatically invalidated when:
 - Cache hits/misses
 - Errors and exceptions
 
-### Kibana Integration
-For production, configure Elasticsearch APM in `settings.py`:
+### Kibana Log Transfer & Visualization
+
+![Kibana Log Dashboard](kibana.png)
+
+*Kibana dashboard showing centralized log aggregation, real-time monitoring, and analytics*
+
+### Log Transfer Architecture
+
+The system implements a complete log transfer pipeline:
+
+1. **Application Logging**: Django generates structured JSON logs
+2. **Log Collection**: Filebeat/Logstash collects logs from log files
+3. **Log Processing**: Logstash parses and enriches log data
+4. **Storage**: Elasticsearch stores and indexes logs
+5. **Visualization**: Kibana provides dashboards and analytics
+
+### Configuration
+
+**Django Logging Settings:**
 ```python
-ELASTIC_APM = {
-    'SERVICE_NAME': 'smart-locker-system',
-    'SERVER_URL': 'http://localhost:8200',
-    'ENVIRONMENT': 'production',
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'json': {
+            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'fmt': '%(levelname) %(name) %(asctime) %(module) %(message)',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'app.log',
+            'formatter': 'json',
+        },
+    },
 }
 ```
 
-Install APM agent:
-```bash
-pip install elastic-apm
+**Logstash Configuration:**
+```ruby
+input {
+  file {
+    path => "/path/to/locker_system/logs/*.log"
+    start_position => "beginning"
+    codec => "json"
+  }
+}
+
+filter {
+  date {
+    match => [ "asctime", "ISO8601" ]
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["http://localhost:9200"]
+    index => "locker-system-logs-%{+YYYY.MM.dd}"
+  }
+}
 ```
+
+### Benefits
+- ✅ Centralized log management
+- ✅ Real-time log monitoring
+- ✅ Advanced search and filtering
+- ✅ Custom dashboards and visualizations
+- ✅ Alerting on critical errors
+- ✅ Performance analytics
+- ✅ Audit trail compliance
 
 ## 🎨 Web UI
 
@@ -338,12 +416,12 @@ locker_system/
 ├── locker_system/         # Project settings
 │   ├── settings.py        # Django settings
 │   └── urls.py            # Main URL configuration
-├── templates/             # HTML templates
-│   └── index.html         # Main UI
 ├── logs/                  # Application logs
 │   ├── app.log
 │   └── error.log
+├── logstash.conf          # Logstash configuration for log transfer
 ├── manage.py
+├── API_REFERENCE.md       # Complete API documentation
 └── README.md
 ```
 
